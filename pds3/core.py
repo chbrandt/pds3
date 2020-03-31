@@ -10,6 +10,9 @@ __all__ = [
 from warnings import warn
 from collections import OrderedDict
 
+import logging
+log = logging.getLogger()
+
 try:
     from ply import lex, yacc
 except ImportError:
@@ -81,7 +84,7 @@ PDS3_DATA_TYPE_TO_DTYPE = {
 
 
 class PDS3Parser():
-    tokens = ['KEYWORD', 'POINTER', 'STRING', 'INT', 'REAL',
+    tokens = ['KEYWORD', 'POINTER', 'STRING', 'INT', 'REAL', 'FLOAT',
               'UNIT', 'DATE', 'END']
 
     literals = list('=(){},')
@@ -105,7 +108,7 @@ class PDS3Parser():
                                  **kwargs)
 
     def t_KEYWORD(self, t):
-        r'[A-Z][A-Z0-9_:]*'
+        r'[A-Z][a-zA-Z0-9_:]*'
         if t.value == 'END':
             t.type = 'END'
         return t
@@ -127,16 +130,28 @@ class PDS3Parser():
         if unit in self.unit_translate:
             unit = self.unit_translate[unit]
 
+        _degC = u.def_unit('degC', u.deg_C)
+        _degc = u.def_unit('degc', _degC)
+        _w = u.def_unit('w', u.W)
+        u.add_enabled_units([_degC,_degc,_w])
+
         t.value = u.Unit(unit)
         return t
 
     def t_STRING(self, t):
-        r'"[^"]+"'
+        #r'"[^"]+"'
+        #r'"(?:\w)"|[\w_-]+'
+        r'"(.*)"'
         t.value = t.value[1:-1].replace('\r', '')
         return t
 
     def t_REAL(self, t):
-        r'[+-]?(([0-9]+\.[0-9]*)|(\.[0-9]+))([Ee][+-]?[0-9]+)?'
+        r'[-+]?[\d]+\.?[\d]*(?:[eE][-+]?[\d]+)'
+        t.value = float(t.value)
+        return t
+
+    def t_FLOAT(self, t):
+        r'[+-]?([0-9]+\.[0-9]+)'
         t.value = float(t.value)
         return t
 
@@ -146,7 +161,10 @@ class PDS3Parser():
         return t
 
     def t_error(self, t):
-        raise IllegalCharacter(t.value[0])
+        #raise IllegalCharacter(t.value[0])
+        log.error("IllegalCharacter: {}".format(t.value[0]))
+        #t.lexer.skip(1)
+        #return t
 
     def lexer_test(self, data):
         self.lexer.input(data)
@@ -154,7 +172,7 @@ class PDS3Parser():
             tok = self.lexer.token()
             if not tok:
                 break
-            print(tok)
+            #print(tok)
 
     def p_label(self, p):
         """label : record
@@ -196,6 +214,7 @@ class PDS3Parser():
 
     def p_number(self, p):
         """number : INT
+                  | FLOAT
                   | REAL"""
         p[0] = p[1]
 
